@@ -6,3 +6,4 @@ The signal of the WS2811 is 5V level. So it should be divided by resistors to dr
 
 Signal level = (1 / (1 + 0.51)) * 5V = 3.2V
 
+To test the code, you can run the Blink/Blink.ino on the Arduino. The signal wire is conected to the PB0 Pin.

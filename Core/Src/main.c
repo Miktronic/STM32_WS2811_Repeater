@@ -40,6 +40,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+TIM_HandleTypeDef htim2;
+
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
@@ -50,6 +52,7 @@ UART_HandleTypeDef huart1;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -62,7 +65,10 @@ uint8_t pattern[24] = {0};
 
 uint8_t idx = 0;
 uint8_t cnt = 0;
+uint32_t timestamp = 0;
+uint8_t rgb[3] = {0x00};
 
+uint8_t i = 0;
 /* USER CODE END 0 */
 
 /**
@@ -94,8 +100,9 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART1_UART_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-
+  HAL_TIM_Base_Start(&htim2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -107,7 +114,15 @@ int main(void)
     /* USER CODE BEGIN 3 */
 	  if (cnt == 24){
 		  cnt = 0;
-		  HAL_UART_Transmit(&huart1,pattern, 24 ,10);// Sending in normal mode
+		  rgb[0] = pattern[0];
+		  rgb[1] = pattern[8];
+		  rgb[2] = pattern[16];
+		  for (i = 1; i < 8; i++){
+			  rgb[0] = (rgb[0] << 1) + pattern[i];
+			  rgb[1] = (rgb[1] << 1) + pattern[(i+8)];
+			  rgb[2] = (rgb[2] << 1) + pattern[(i+16)];
+		  }
+		  HAL_UART_Transmit(&huart1, rgb, 3 ,10);// Sending in normal mode
 	  }
 
   }
@@ -157,6 +172,51 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 168-1;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 4294967295;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+
 }
 
 /**
@@ -226,6 +286,9 @@ static void MX_GPIO_Init(void)
 void HAL_GPIO_EXTI_Callback( uint16_t GPIO_Pin)
 {
 	if(GPIO_Pin == GPIO_PIN_0){
+		timestamp = TIM2->CNT;
+		if (timestamp > 20) cnt = 0;
+		TIM2->CNT = 0;
 		idx = cnt % 24;
 		pattern[idx] = (GPIOB->IDR & 0x01);
 		cnt = cnt + 1;
