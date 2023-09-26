@@ -22,7 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #define USE_BRIGHTNESS	0
-#define MAX_LED			2
+#define MAX_LED			4
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -66,14 +66,12 @@ static void MX_TIM1_Init(void);
 /* USER CODE BEGIN 0 */
 uint32_t ICValue = 0;
 uint32_t freq = 0;
-uint8_t pattern[24] = {0};
+uint8_t pattern[(24*MAX_LED)] = {0};
 
 uint8_t idx = 0;
 uint8_t cnt = 0;
 uint32_t timestamp = 0;
-uint8_t rgb[3] = {0x00};
-
-uint8_t i = 0;
+uint8_t rgb[MAX_LED][3] = {0x00};
 
 uint8_t LED_Data[MAX_LED][4];
 uint8_t LED_Mod[MAX_LED][4];
@@ -89,6 +87,18 @@ void Set_LED (int LEDnum, int Red, int Green, int Blue)
 	LED_Data[LEDnum][3] = Blue;
 }
 
+void Set_RGB (uint8_t LEDnum, uint8_t *pat)
+{
+
+	rgb[LEDnum][0] = *pat;
+	rgb[LEDnum][1] = *(pat + 8);
+	rgb[LEDnum][2] = *(pat + 16);
+	for (int k = 1; k < 8; k++){
+		rgb[LEDnum][0] = (rgb[LEDnum][0] << 1) + *(pat + k);
+		rgb[LEDnum][1] = (rgb[LEDnum][1] << 1) + *(pat + k + 8);
+		rgb[LEDnum][2] = (rgb[LEDnum][2] << 1) + *(pat + k + 16);
+	}
+}
 void WS2812_Send (void)
 {
 	uint32_t indx=0;
@@ -176,20 +186,14 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  if (cnt == 24){
+	  if (cnt == (24 * MAX_LED)){
 		  cnt = 0;
-		  rgb[0] = pattern[0];
-		  rgb[1] = pattern[8];
-		  rgb[2] = pattern[16];
-		  for (i = 1; i < 8; i++){
-			  rgb[0] = (rgb[0] << 1) + pattern[i];
-			  rgb[1] = (rgb[1] << 1) + pattern[(i+8)];
-			  rgb[2] = (rgb[2] << 1) + pattern[(i+16)];
+		  for (int i = 0; i < MAX_LED; i++){
+			  Set_RGB(i, &pattern[(24 * i)]);
+			  Set_LED(i, rgb[i][0], rgb[i][1], rgb[i][2]);
 		  }
-		  HAL_UART_Transmit(&huart1, rgb, 3 ,10);// Sending in normal mode
-
-		  Set_LED(0, rgb[0], rgb[1], rgb[2]);
-		  Set_LED(1, rgb[0], rgb[1], rgb[2]);
+		  HAL_UART_Transmit(&huart1, &rgb[0][0], (MAX_LED * 3) ,10);// Sending in normal mode
+		  //HAL_UART_Transmit(&huart1, pattern, (MAX_LED * 24) ,10);// Sending in normal mode
 		  WS2812_Send();
 	  }
 
@@ -449,7 +453,7 @@ void HAL_GPIO_EXTI_Callback( uint16_t GPIO_Pin)
 {
 	if(GPIO_Pin == GPIO_PIN_0){
 		timestamp = TIM2->CNT;
-		if (timestamp > 25) {
+		if (timestamp > 30) {
 			cnt = 0;
 		}
 		//idx = cnt % 24;
