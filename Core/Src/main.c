@@ -22,7 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #define USE_BRIGHTNESS	0
-#define MAX_LED			4
+#define MAX_LED			999
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -46,7 +46,8 @@ TIM_HandleTypeDef htim2;
 DMA_HandleTypeDef hdma_tim1_ch1;
 
 UART_HandleTypeDef huart1;
-
+uint16_t LED_NUMBER = 0;
+uint16_t cnt = 0;
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -66,10 +67,9 @@ static void MX_TIM1_Init(void);
 /* USER CODE BEGIN 0 */
 uint32_t ICValue = 0;
 uint32_t freq = 0;
+uint8_t prev_pattern[(24*MAX_LED)] = {0};
 uint8_t pattern[(24*MAX_LED)] = {0};
 
-uint8_t idx = 0;
-uint8_t cnt = 0;
 uint32_t timestamp = 0;
 uint8_t rgb[MAX_LED][3] = {0x00};
 
@@ -78,6 +78,9 @@ uint8_t LED_Mod[MAX_LED][4];
 
 uint16_t pwmData[(24*MAX_LED)+10];
 uint8_t datasentflag = 1;
+
+uint8_t ignore_flag = 0;
+uint8_t captured_flag = 0;
 
 void Set_LED (int LEDnum, int Red, int Green, int Blue)
 {
@@ -108,7 +111,7 @@ void WS2812_Send (void)
 	{
 
 		datasentflag = 0;
-		for (int i= 0; i<MAX_LED; i++)
+		for (int i= 0; i<LED_NUMBER; i++)
 		{
 			#if USE_BRIGHTNESS
 				color = ((LED_Mod[i][1]<<16) | (LED_Mod[i][2]<<8) | (LED_Mod[i][3]));
@@ -140,6 +143,17 @@ void WS2812_Send (void)
 	}
 }
 
+void filter(void)
+{
+	ignore_flag = 1;
+
+	for(int i = 0; i < (24 * LED_NUMBER); i++){
+		if(prev_pattern[i] != pattern[i]){
+			ignore_flag = 0;
+		}
+		prev_pattern[i] = pattern[i];
+	}
+}
 /* USER CODE END 0 */
 
 /**
@@ -176,6 +190,7 @@ int main(void)
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start(&htim2);
+  LED_NUMBER = MAX_LED;
 
   /* USER CODE END 2 */
 
@@ -186,15 +201,18 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  if (cnt == (24 * MAX_LED)){
-		  cnt = 0;
-		  for (int i = 0; i < MAX_LED; i++){
-			  Set_RGB(i, &pattern[(24 * i)]);
-			  Set_LED(i, rgb[i][0], rgb[i][1], rgb[i][2]);
+	  if (captured_flag){
+		  captured_flag = 0;
+		  filter();
+		  if (ignore_flag == 0){
+			  for (int i = 0; i < LED_NUMBER; i++){
+				  Set_RGB(i, &pattern[(24 * i)]);
+				  Set_LED(i, rgb[i][0], rgb[i][1], rgb[i][2]);
+			  }
+			  //HAL_UART_Transmit(&huart1, &rgb[0][0], (LED_NUMBER * 3) ,10);// Sending in normal mode
+			  //HAL_UART_Transmit(&huart1, &LED_NUMBER, 2 ,10);// Sending in normal mode
+			  WS2812_Send();
 		  }
-		  HAL_UART_Transmit(&huart1, &rgb[0][0], (MAX_LED * 3) ,10);// Sending in normal mode
-		  //HAL_UART_Transmit(&huart1, pattern, (MAX_LED * 24) ,10);// Sending in normal mode
-		  WS2812_Send();
 	  }
 
 
@@ -453,13 +471,17 @@ void HAL_GPIO_EXTI_Callback( uint16_t GPIO_Pin)
 {
 	if(GPIO_Pin == GPIO_PIN_0){
 		timestamp = TIM2->CNT;
-		if (timestamp > 30) {
+		if (timestamp > 30) { //if the reset code is detected
+			LED_NUMBER = cnt / 24;
 			cnt = 0;
+			captured_flag = 1;
 		}
-		//idx = cnt % 24;
-		pattern[cnt] = (GPIOB->IDR & 0x01);
-		cnt = cnt + 1;
+		else{ // if data is still streaming
+			pattern[cnt] = (GPIOB->IDR & 0x01);
+			cnt = cnt + 1;
+		}
 		TIM2->CNT = 0;
+
 	}
 }
 
