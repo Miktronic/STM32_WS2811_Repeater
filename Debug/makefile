@@ -60,8 +60,8 @@ all: main-build
 main-build: stm32_pwm_capture.elf secondary-outputs
 
 # Tool invocations
-stm32_pwm_capture.elf stm32_pwm_capture.map: $(OBJS) $(USER_OBJS) C:\Users\steph\STM32CubeIDE\workspace_1.13.1\stm32_pwm_capture\STM32F407VETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "stm32_pwm_capture.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\steph\STM32CubeIDE\workspace_1.13.1\stm32_pwm_capture\STM32F407VETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="stm32_pwm_capture.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+stm32_pwm_capture.elf stm32_pwm_capture.map: $(OBJS) $(USER_OBJS) E:\2023\Raspberry\ Pico_UCS1903\ Data\ filter\STM32_WS2811_Repeater\STM32F407VETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "stm32_pwm_capture.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"E:\2023\Raspberry Pico_UCS1903 Data filter\STM32_WS2811_Repeater\STM32F407VETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="stm32_pwm_capture.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

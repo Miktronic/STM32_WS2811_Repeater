@@ -215,8 +215,12 @@ int main(void)
 		  }
 	  }
 
-
-
+	  if (timestamp > 30) { //if the reset code is detected
+		  timestamp = 0;
+		  LED_NUMBER = cnt / 24;
+		  cnt = 0;
+		  captured_flag = 1;
+	  }
   }
   /* USER CODE END 3 */
 }
@@ -470,16 +474,14 @@ static void MX_GPIO_Init(void)
 void HAL_GPIO_EXTI_Callback( uint16_t GPIO_Pin)
 {
 	if(GPIO_Pin == GPIO_PIN_0){
-		timestamp = TIM2->CNT;
-		if (timestamp > 30) { //if the reset code is detected
-			LED_NUMBER = cnt / 24;
-			cnt = 0;
-			captured_flag = 1;
+		if (cnt == 0){
+			timestamp = 0;
 		}
-		else{ // if data is still streaming
-			pattern[cnt] = (GPIOB->IDR & 0x01);
-			cnt = cnt + 1;
+		else{
+			timestamp = TIM2->CNT;
 		}
+		pattern[cnt] = (GPIOB->IDR & 0x01);
+		cnt = cnt + 1;
 		TIM2->CNT = 0;
 
 	}
