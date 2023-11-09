@@ -22,7 +22,9 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #define USE_BRIGHTNESS	0
-#define MAX_LED			999
+#define MAX_LED			999   // MAXIMUM LED AMOUNT
+#define MAX_PATTERNS	23976 // MAXIMUM LED AMOUNT * 24, PATTERN Bits, 1 LED includes 24 bits for RGB color
+#define MAX_PWM_DATA	23986
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -67,93 +69,82 @@ static void MX_TIM1_Init(void);
 /* USER CODE BEGIN 0 */
 uint32_t ICValue = 0;
 uint32_t freq = 0;
-uint8_t prev_pattern[(24*MAX_LED)] = {0};
-uint8_t pattern[(24*MAX_LED)] = {0};
+//uint8_t prev_pattern[MAX_PATTERNS] = {0};
+//uint8_t pattern[MAX_PATTERNS] = {0};
 
 uint32_t timestamp = 0;
-uint8_t rgb[MAX_LED][3] = {0x00};
+///uint8_t rgb[MAX_LED][3] = {0x00};
 
-uint8_t LED_Data[MAX_LED][4];
-uint8_t LED_Mod[MAX_LED][4];
+//uint8_t LED_Data[MAX_LED][3] = {0x00};
+//uint16_t LED_Data_Index[MAX_LED];
+//uint8_t LED_Mod[MAX_LED][4];
 
-uint16_t pwmData[(24*MAX_LED)+10];
+uint16_t pwmData[MAX_PWM_DATA] = {0x0000};
+uint32_t led_data[MAX_LED] = {0};
+uint16_t led_count = 0;
+
 uint8_t datasentflag = 1;
 
 uint8_t ignore_flag = 0;
 uint8_t captured_flag = 0;
+uint8_t streaming_flag = 0;
 
-void Set_LED (int LEDnum, int Red, int Green, int Blue)
-{
-	LED_Data[LEDnum][0] = LEDnum;
-	LED_Data[LEDnum][1] = Red;
-	LED_Data[LEDnum][2] = Green;
-	LED_Data[LEDnum][3] = Blue;
-}
-
-void Set_RGB (uint8_t LEDnum, uint8_t *pat)
-{
-
-	rgb[LEDnum][0] = *pat;
-	rgb[LEDnum][1] = *(pat + 8);
-	rgb[LEDnum][2] = *(pat + 16);
-	for (int k = 1; k < 8; k++){
-		rgb[LEDnum][0] = (rgb[LEDnum][0] << 1) + *(pat + k);
-		rgb[LEDnum][1] = (rgb[LEDnum][1] << 1) + *(pat + k + 8);
-		rgb[LEDnum][2] = (rgb[LEDnum][2] << 1) + *(pat + k + 16);
-	}
-}
+// generate the PWM duty to drive the UCS1903
 void WS2812_Send (void)
 {
-	uint32_t indx=0;
-	uint32_t color;
+	uint16_t indx=0;
+	uint16_t m = 0;
+	int8_t j = 0;
 
-	if (datasentflag == 1)
+	if (datasentflag == 1) // Finished transmitting the data.
 	{
 
-		datasentflag = 0;
-		for (int i= 0; i<LED_NUMBER; i++)
-		{
-			#if USE_BRIGHTNESS
-				color = ((LED_Mod[i][1]<<16) | (LED_Mod[i][2]<<8) | (LED_Mod[i][3]));
-			#else
-				color = ((LED_Data[i][1]<<16) | (LED_Data[i][2]<<8) | (LED_Data[i][3]));
-			#endif
+		datasentflag = 0; // Clear the flag
 
-				for (int i=23; i>=0; i--)
+		for (m= 0; m<LED_NUMBER; m++)
+		{
+				for (j=23; j>=0; j--)
 				{
-					if (color&(1<<i))
+					if (led_data[m]&(1<<j))
 					{
-						pwmData[indx] = 336;  // 4/5 of 420
+						pwmData[indx] = 336;  // This is the PWM Duty to send the logic 1 to the UCS1903
 					}
 
-					else pwmData[indx] = 84;  // 1/5 of 420
+					else{
+						pwmData[indx] = 84;  // This is the PWM Duty to send the logic 0 to the UCS1903
+					}
 
 					indx++;
 				}
 
 		}
 
-		for (int i=0; i<10; i++)
+		for (m=0; m<10; m++)
 		{
 			pwmData[indx] = 0;
 			indx++;
 		}
 
+		// Start transmit
 		HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1, (uint32_t *)pwmData, indx);
 	}
 }
 
-void filter(void)
+/*
+ void filter(void)
 {
 	ignore_flag = 1;
+	uint16_t i = 0;
 
-	for(int i = 0; i < (24 * LED_NUMBER); i++){
+	for(i = 0; i < (24 * LED_NUMBER); i++){
 		if(prev_pattern[i] != pattern[i]){
 			ignore_flag = 0;
 		}
 		prev_pattern[i] = pattern[i];
 	}
 }
+*/
+
 /* USER CODE END 0 */
 
 /**
@@ -163,7 +154,6 @@ void filter(void)
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -190,6 +180,8 @@ int main(void)
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start(&htim2);
+
+  // Initiate the LED_NUMBER, This is the real amount of the LEDs connected to the board and updated real-time.
   LED_NUMBER = MAX_LED;
 
   /* USER CODE END 2 */
@@ -201,22 +193,22 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  if (captured_flag){
-		  captured_flag = 0;
-		  filter();
+	  if (captured_flag == 1){
+		  //filter();
 		  if (ignore_flag == 0){
-			  for (int i = 0; i < LED_NUMBER; i++){
-				  Set_RGB(i, &pattern[(24 * i)]);
-				  Set_LED(i, rgb[i][0], rgb[i][1], rgb[i][2]);
-			  }
-			  //HAL_UART_Transmit(&huart1, &rgb[0][0], (LED_NUMBER * 3) ,10);// Sending in normal mode
-			  //HAL_UART_Transmit(&huart1, &LED_NUMBER, 2 ,10);// Sending in normal mode
+			  //print the captured LED data
+			  HAL_UART_Transmit(&huart1, (uint8_t*)led_data, (LED_NUMBER * 4) ,10);
+			  // Drive UCS1903 and Lights
 			  WS2812_Send();
 		  }
+		  captured_flag = 0;
 	  }
 
-	  if (timestamp > 30) { //if the reset code is detected
-		  timestamp = 0;
+	  // Detect the LED number automatically. If the reset signal is detected while the LEDs are working(streaming_flag==1),
+	  // Store LED number and reset the count variable, and set the captured_flag to drive the UCS1903 connected to MCU
+
+	  if ((streaming_flag == 1) && (TIM2->CNT > 15)) { //if the reset code is detected
+		  streaming_flag  = 0;
 		  LED_NUMBER = cnt / 24;
 		  cnt = 0;
 		  captured_flag = 1;
@@ -272,6 +264,7 @@ void SystemClock_Config(void)
 
 /**
   * @brief TIM1 Initialization Function
+  *        TIM1 is to generate PWM signals to drive UCS1903 based on LED color info.
   * @param None
   * @retval None
   */
@@ -347,6 +340,8 @@ static void MX_TIM1_Init(void)
 
 /**
   * @brief TIM2 Initialization Function
+  * 	   TIM2 is to calculate the interval between LED Drive signals. When the lights are working, the interval is about 2.5us and
+  * 	   the reset time is over 24us. This time is used to detect the reset signal.
   * @param None
   * @retval None
   */
@@ -364,7 +359,7 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 168-1;
+  htim2.Init.Prescaler = 84-1;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim2.Init.Period = 4294967295;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -456,7 +451,10 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
 
-  /*Configure GPIO pin : PB0 */
+  /*
+   * Configure GPIO pin : PB0
+   * This is the input pin from output of the UCS1903
+  */
   GPIO_InitStruct.Pin = GPIO_PIN_0;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
@@ -473,23 +471,32 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void HAL_GPIO_EXTI_Callback( uint16_t GPIO_Pin)
 {
+	// Detect the input signal from UCS1903
 	if(GPIO_Pin == GPIO_PIN_0){
-		if (cnt == 0){
-			timestamp = 0;
-		}
-		else{
-			timestamp = TIM2->CNT;
-		}
-		pattern[cnt] = (GPIOB->IDR & 0x01);
-		cnt = cnt + 1;
+		// Initiate the TIM2 counter to calculate the time interval between PWM Color signals
 		TIM2->CNT = 0;
+		// Set the LED streaming flag
+		streaming_flag = 1;
+		// LED index in the LED data array. The LED data is 24-bit value that indicates RGB values(8-bit x 3 colors).
+		// One PWM pulse indicates one color bit.
+		led_count = cnt / 24;
 
+		// if 24-bit color data is fully stored in led_data[led_count], initiate the led_data.
+		if (cnt % 24 == 0){
+			led_data[led_count] = 0;
+		}
+		// Store color bits to  led_data[led_count]
+		led_data[led_count] = (led_data[led_count] << 1) + (GPIOB->IDR & 0x01);
+		//increase counter
+		cnt = cnt + 1;
 	}
 }
 
 void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 {
 	HAL_TIM_PWM_Stop_DMA(&htim1, TIM_CHANNEL_1);
+
+	// set the flag when all of PWM signal is output
 	datasentflag=1;
 }
 /* USER CODE END 4 */
